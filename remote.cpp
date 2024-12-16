@@ -45,11 +45,11 @@ void setup() {
   pinMode(JOYSTICK_Y, INPUT);
   pinMode(JOYSTICK_SW, INPUT_PULLUP);
 
-  pinMode(BUTTON_1, INPUT_PULLUP);
-  pinMode(BUTTON_2, INPUT_PULLUP);
-  pinMode(BUTTON_3, INPUT_PULLUP);
-  pinMode(BUTTON_4, INPUT_PULLUP);
-  pinMode(BUTTON_5, INPUT_PULLUP);
+  pinMode(BUTTON_1, INPUT_PULLDOWN);
+  pinMode(BUTTON_2, INPUT_PULLDOWN);
+  pinMode(BUTTON_3, INPUT_PULLDOWN);
+  pinMode(BUTTON_4, INPUT_PULLDOWN);
+  pinMode(BUTTON_5, INPUT_PULLDOWN);
 
   // Initialize Wi-Fi in station mode and ensure it's disconnected from any AP
   WiFi.mode(WIFI_STA);
@@ -84,11 +84,11 @@ void loop() {
   data.sw = digitalRead(JOYSTICK_SW);
 
   // Read button states (inverting because they are INPUT_PULLUP)
-  data.btn1 = !digitalRead(BUTTON_1);
-  data.btn2 = !digitalRead(BUTTON_2);
-  data.btn3 = !digitalRead(BUTTON_3);
-  data.btn4 = !digitalRead(BUTTON_4);
-  data.btn5 = !digitalRead(BUTTON_5);
+  data.btn1 = digitalRead(BUTTON_1);
+  data.btn2 = digitalRead(BUTTON_2);
+  data.btn3 = digitalRead(BUTTON_3);
+  data.btn4 = digitalRead(BUTTON_4);
+  data.btn5 = digitalRead(BUTTON_5);
 
   // Print data to Serial Monitor for debugging
   Serial.print("Joystick X: ");

@@ -49,7 +49,7 @@ const int REST_Y = 32767;
 // DFRobot Voice Prompt Functions
 // *****************************
 
-HardwareSerial mySerial(2); // Serial2 for voice module
+HardwareSerial mySerial(1); // Serial2 for voice module
 
 void send_command(uint8_t command[], size_t length) {
   for (size_t i = 0; i < length; i++) {
@@ -136,11 +136,11 @@ void joystickOutput(int x, int y, int sw, int btn1, int btn2, int btn3, int btn4
   // Play sounds if buttons are pressed
   // Here we simply map each button to a specific track number.
   // Adjust track numbers as per your module's SD card setup.
-  if (btn1) play_track(1);
-  if (btn2) play_track(2);
-  if (btn3) play_track(3);
-  if (btn4) play_track(4);
-  if (btn5) play_track(5);
+  if (btn1 == 1) play_track(1);
+  if (btn2 == 1) play_track(2);
+  if (btn3 == 1) play_track(3);
+  if (btn4 == 1) play_track(4);
+  if (btn5 == 1) play_track(5);
 }
 
 // ESP-NOW data receive callback
@@ -214,7 +214,7 @@ void setup() {
   delay(1000); // Give the module some time to initialize
 
   // Optionally set initial volume
-  set_volume(5);
+  set_volume(10);
 
   // Print confirmation of initialization
   Serial.println("ESP-NOW Driver is ready on Channel 6 and listening for data...");
