@@ -18,7 +18,8 @@ const int REST_X = 32767;
 const int REST_Y = 32767;
 
 // Replace this with the MAC address of your driver device (found via Serial print of WiFi.macAddress() on the driver)
-uint8_t driverMAC[] = {0x7C, 0x9E, 0xBD, 0x66, 0xAE, 0x4C}; 
+uint8_t driverMAC[] = {0x7C, 0x9E, 0xBD, 0x66, 0x85, 0x80}; 
+//uint8_t driverMAC[] = {0x7C, 0x9E, 0xBD, 0x66, 0xAE, 0x4C}; //for the solderd esp
 
 // Structure to hold data to send
 struct DataPacket {

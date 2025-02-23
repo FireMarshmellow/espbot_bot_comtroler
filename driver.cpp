@@ -7,9 +7,13 @@
 // Pins and Constants
 // *****************************
 
-// Define servo pins
-#define SERVO1_PIN 12
-#define SERVO2_PIN 14
+// Define motor pins
+#define MOTOR1_IN1 32
+#define MOTOR1_IN2 33
+#define MOTOR2_IN1 12
+#define MOTOR2_IN2 14
+
+// Define the regular servo pin
 #define REGULAR_SERVO_PIN 13
 
 // Define RGB LED pins
@@ -35,15 +39,8 @@ struct DataPacket {
 
 DataPacket data;
 
-// Create servo objects
-Servo servo1;
-Servo servo2;
+// Create servo object for the regular (non-continuous) servo
 Servo regularServo;
-
-// Constants
-const int THRESHOLD = 3000;
-const int REST_X = 32767;
-const int REST_Y = 32767;
 
 // *****************************
 // DFRobot Voice Prompt Functions
@@ -72,70 +69,137 @@ void set_volume(uint8_t level) {
   send_command(command, sizeof(command));
 }
 
-// You can add more commands (next_track, pause, etc.) as needed from your esp_player code.
+// *****************************
+// Motor Control Functions
+// *****************************
+
+/**
+ * controlMotor() - Basic forward/reverse/stop control for one DC motor
+ *  direction > 0 => forward
+ *  direction < 0 => reverse
+ *  direction = 0 => stop
+ */
+void controlMotor(int pin1, int pin2, int direction) {
+  if (direction > 0) {
+    digitalWrite(pin1, HIGH);
+    digitalWrite(pin2, LOW);   // Forward
+  } else if (direction < 0) {
+    digitalWrite(pin1, LOW);
+    digitalWrite(pin2, HIGH);  // Reverse
+  } else {
+    digitalWrite(pin1, LOW);
+    digitalWrite(pin2, LOW);   // Stop
+  }
+}
+
+/**
+ * controlMotors() - Helper function to control both motors at once
+ */
+void controlMotors(int motor1Direction, int motor2Direction) {
+  controlMotor(MOTOR1_IN1, MOTOR1_IN2, motor1Direction);
+  controlMotor(MOTOR2_IN1, MOTOR2_IN2, motor2Direction);
+}
 
 // *****************************
 // Utility Functions
 // *****************************
 
-// Set RGB LED color
+// Set RGB LED color (HIGH=ON or LOW=OFF on each pin)
 void setColor(bool red, bool green, bool blue) {
   digitalWrite(LED_RED_PIN, red);
   digitalWrite(LED_GREEN_PIN, green);
   digitalWrite(LED_BLUE_PIN, blue);
 }
 
-// Control continuous servos (0-180 as "speed")
-void controlServos(int servo1Speed, int servo2Speed) {
-  servo1.write(servo1Speed);
-  servo2.write(servo2Speed);
-}
-
-// Control a regular servo
+// Control a regular servo (0-180° as angle)
 void controlRegularServo(int angle) {
   regularServo.write(angle);
 }
 
-// Joystick output handler
-void joystickOutput(int x, int y, int sw, int btn1, int btn2, int btn3, int btn4, int btn5) {
+// *****************************
+// Joystick Handling
+// *****************************
+
+void joystickOutput(int x, int y, int sw, 
+                    int btn1, int btn2, int btn3, 
+                    int btn4, int btn5) 
+{
+  // Approx. midpoints based on your stated ranges
+  //  X: 0 .. 3800 => midpoint ~1900
+  //  Y: 0 .. 3700 => midpoint ~1850
+  const int X_CENTER   = 2433;
+  const int Y_CENTER   = 2480;
+  // Dead-zone threshold => how far from center before you move
+  const int THRESHOLD  = 300;
+
+  // If the joystick’s SW is pressed => use "regular servo" logic
+  // (the motors stop whenever SW is pressed)
   if (sw == 0) {
-    // Joystick switch pressed: manipulate the regular servo angle
-    int angle = 60 + ((REST_X - x) * 60) / REST_X;
+    // ***********************
+    // SERVO CONTROL LOGIC
+    // ***********************
+    
+    // You can map X from [0..3800] to [0..180] for servo
+    // so left is 0°, right is 180°
+    int rawAngle = map(x, 0, 3800, 0, 180);
+    // Adjust if you need to offset the center to 90
+    // This just ensures we start near 90 if x ~1900
+    int angle = constrain(rawAngle, 0, 180);
     controlRegularServo(angle);
 
-    // Set LED color based on x value
-    if (x > REST_X) {
-      setColor(1, 1, 1);  // White
+    // Simple LED feedback: turn on some color depending on direction
+    // You can tune the color logic if desired
+    if (x > X_CENTER) {
+      setColor(1, 1, 1);  // White if joystick is to the right half
     } else {
-      setColor(1, 1, 0);  // Yellow
+      setColor(1, 1, 0);  // Yellow if joystick is to the left half
     }
 
+    // Stop motors
+    controlMotors(0, 0);
+  
   } else {
-    // Joystick switch not pressed
-    controlRegularServo(90); // default position
+    // ***********************
+    // DC MOTOR (TANK DRIVE) LOGIC
+    // ***********************
+    
+    // Keep the regular servo at neutral (90°) when not in servo mode
+    controlRegularServo(90);
 
-    if (x < REST_X - THRESHOLD) {
-      setColor(1, 0, 1);  // Magenta
-      controlServos(40, 40);
-    } else if (x > REST_X + THRESHOLD) {
-      setColor(0, 1, 1);  // Cyan
-      controlServos(100, 100);
-    } else if (y < REST_Y - THRESHOLD) {
-      setColor(0, 1, 0);  // Green
-      controlServos(100, 40);
-    } else if (y > REST_Y + THRESHOLD) {
-      setColor(1, 0, 0);  // Red
-      controlServos(40, 100);
-    } else {
-      // No significant movement: stop servos and turn off LED
-      controlServos(90, 90);
-      setColor(0, 0, 0);
+    // Decide movement based on joystick X/Y
+    // Forward/Backward => Y axis
+    // Left/Right => X axis
+
+    // Check Y first
+    if (y < (Y_CENTER - THRESHOLD)) {
+      // Forward => both motors forward
+      setColor(0, 1, 0);           
+      controlMotors(1, 1);
+    }
+    else if (y > (Y_CENTER + THRESHOLD)) {
+      // Backward => both motors backward
+      setColor(1, 0, 0);           
+      controlMotors(-1, -1);
+    }
+    // If Y is near center, check X for turning
+    else if (x < (X_CENTER - THRESHOLD)) {
+      // Turn left => left motor backward, right motor forward
+      setColor(1, 0, 1);          
+      controlMotors(-1, 1);
+    }
+    else if (x > (X_CENTER + THRESHOLD)) {
+      // Turn right => left motor forward, right motor backward
+      setColor(0, 1, 1);         
+      controlMotors(1, -1);
+    }
+    else {
+      // If within thresholds, do nothing => STOP
+      controlMotors(0, 0);
+      setColor(0, 0, 0);  // LED off
     }
   }
 
   // Play sounds if buttons are pressed
-  // Here we simply map each button to a specific track number.
-  // Adjust track numbers as per your module's SD card setup.
   if (btn1 == 1) play_track(1);
   if (btn2 == 1) play_track(2);
   if (btn3 == 1) play_track(3);
@@ -143,8 +207,13 @@ void joystickOutput(int x, int y, int sw, int btn1, int btn2, int btn3, int btn4
   if (btn5 == 1) play_track(5);
 }
 
-// ESP-NOW data receive callback
-void onDataReceive(const esp_now_recv_info_t *recvInfo, const uint8_t *incomingData, int len) {
+// *****************************
+// ESP-NOW Callback
+// *****************************
+
+void onDataReceive(const esp_now_recv_info_t *recvInfo, 
+                   const uint8_t *incomingData, int len) 
+{
   if (len == sizeof(data)) {
     memcpy(&data, incomingData, sizeof(data));
 
@@ -166,29 +235,43 @@ void onDataReceive(const esp_now_recv_info_t *recvInfo, const uint8_t *incomingD
     Serial.print(" | BTN5: ");
     Serial.println(data.btn5);
 
-    joystickOutput(data.x, data.y, data.sw, data.btn1, data.btn2, data.btn3, data.btn4, data.btn5);
+    joystickOutput(data.x, data.y, data.sw,
+                   data.btn1, data.btn2, data.btn3,
+                   data.btn4, data.btn5);
   } else {
     Serial.println("Received data length mismatch.");
   }
 }
 
+// *****************************
+// setup()
+// *****************************
+
 void setup() {
   // Initialize Serial Monitor
   Serial.begin(115200);
-  Serial.println("Hello, world!");
 
+  // Initialize Wi-Fi in Station mode so we can get a valid MAC address.
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
-  WiFi.setChannel(6);
 
-  // Print out the MAC address so it can be used on the remote side
-  Serial.print("Driver device MAC: ");
+  // Print the MAC address at the start
+  Serial.println("Hello, world!");
+  Serial.print("Driver device MAC (at the start): ");
   Serial.println(WiFi.macAddress());
 
-  // Initialize servo objects
-  servo1.attach(SERVO1_PIN);
-  servo2.attach(SERVO2_PIN);
+  // Optionally set a channel if you already use a specific one (like 6)
+  WiFi.setChannel(6);
+
+  // Initialize DC motor pins as outputs
+  pinMode(MOTOR1_IN1, OUTPUT);
+  pinMode(MOTOR1_IN2, OUTPUT);
+  pinMode(MOTOR2_IN1, OUTPUT);
+  pinMode(MOTOR2_IN2, OUTPUT);
+
+  // Initialize the regular servo (pin 13)
   regularServo.attach(REGULAR_SERVO_PIN);
+  controlRegularServo(90);  // Start at 90°
 
   // Initialize RGB LED pins
   pinMode(LED_RED_PIN, OUTPUT);
@@ -196,16 +279,11 @@ void setup() {
   pinMode(LED_BLUE_PIN, OUTPUT);
   setColor(0, 0, 0);  // Turn off LED initially
 
-  // Set servos to initial positions
-  controlServos(90, 90);
-  controlRegularServo(90);
-
   // Initialize ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
     return;
   }
-
   // Register the receive callback
   esp_now_register_recv_cb(onDataReceive);
 
@@ -214,12 +292,15 @@ void setup() {
   delay(1000); // Give the module some time to initialize
 
   // Optionally set initial volume
-  set_volume(10);
+  set_volume(20);
 
   // Print confirmation of initialization
   Serial.println("ESP-NOW Driver is ready on Channel 6 and listening for data...");
 }
 
+// *****************************
+// loop()
+// *****************************
 void loop() {
   // Nothing to do here; data is handled in the callback
 }
